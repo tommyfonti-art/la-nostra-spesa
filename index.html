@@ -127,12 +127,12 @@ textarea.campo{resize:vertical;min-height:120px;line-height:1.45}
    → scorri fino a "Le tue app" → app web → "Configurazione SDK".
    Sostituisci l'intero oggetto qui sotto col tuo, poi salva il file. */
 var firebaseConfig = {
-  apiKey: "AIzaSyBf_L7I710y1uCfqexrRS2A7fa1AIeQdPM",
-  authDomain: "spesa-b6ed3.firebaseapp.com",
-  projectId: "spesa-b6ed3",
-  storageBucket: "spesa-b6ed3.firebasestorage.app",
-  messagingSenderId: "85578996832",
-  appId: "1:85578996832:web:97e9f2926410e13cda3705"
+  apiKey: "INCOLLA_QUI",
+  authDomain: "INCOLLA_QUI",
+  projectId: "INCOLLA_QUI",
+  storageBucket: "INCOLLA_QUI",
+  messagingSenderId: "INCOLLA_QUI",
+  appId: "INCOLLA_QUI"
 };
 /* ========================================================= */
 (function(){
@@ -207,28 +207,22 @@ var firebaseConfig = {
 
   /* ---------- scrittura dati ---------- */
   async function onWriteError(e, id){
-    if (e && e.code === 'invalid_argument'){
-      if (id && col){
-        try {
-          var s = await col.doc(id).get();
-          if (!s.exists){ toast('Questo prodotto è stato tolto da un altro dispositivo'); return; }
-        } catch(_){}
-      }
+    if (e && e.code === 'not-found'){
+      toast('Questo prodotto è stato tolto da un altro dispositivo');
+    } else if (e && e.code === 'permission-denied'){
       writable = false; status = 'lettura'; render();
       toast('Non hai il permesso di modificare la lista');
-    } else if (e && e.code === 'quota_exceeded'){
+    } else if (e && e.code === 'resource-exhausted'){
       toast('Archivio pieno: elimina qualche prodotto');
     } else {
       toast('Non sono riuscito a salvare. Riprova.');
     }
   }
   function save(id, patch){
-    if (local){
-      var it = items.find(function(x){ return x.id === id; });
-      if (it) Object.assign(it, patch);
-      render();
-      return Promise.resolve();
-    }
+    var it = items.find(function(x){ return x.id === id; });
+    if (it) Object.assign(it, patch);
+    render();
+    if (local) return Promise.resolve();
     var run = function(){ return col.doc(id).update(patch).catch(function(err){ return onWriteError(err, id); }); };
     queues[id] = (queues[id] || Promise.resolve()).then(run);
     return queues[id];
