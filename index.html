@@ -162,6 +162,7 @@ var firebaseConfig = {
   var confSvuota = 0;
   var svuotando = false;
   var dirty = false;
+  var dbRef = null;
   var queues = {};
   var toastTimer;
 
@@ -256,33 +257,57 @@ var firebaseConfig = {
   function esiste(negozio, nome, escludiId){
     return items.some(function(i){ return i.id !== escludiId && i.negozio === negozio && i.nome.toLowerCase() === nome.toLowerCase(); });
   }
+  async function importaBatch(righe){
+    var toAdd = [];
+    for (var s of NEGOZI){
+      if (!sel.has(s)) continue;
+      var visti = new Set();
+      for (var nome of righe){
+        var k = nome.toLowerCase();
+        if (visti.has(k) || esiste(s, nome)) continue;
+        visti.add(k);
+        toAdd.push({nome: nome, negozio: s, inLista: false, preso: false, prezzo: null, creato: Date.now()});
+      }
+    }
+    if (!toAdd.length) return {fatti:0, falliti:0};
+    var CH = 400, fatti = 0, falliti = 0;
+    for (var i = 0; i < toAdd.length; i += CH){
+      var chunk = toAdd.slice(i, i + CH);
+      var batch = dbRef.batch();
+      chunk.forEach(function(data){ batch.set(col.doc(), data); });
+      try { await withTimeout(batch.commit(), 20000); fatti += chunk.length; }
+      catch(e){ falliti += chunk.length; }
+    }
+    return {fatti: fatti, falliti: falliti};
+  }
   async function importa(){
     if (!writable || importing) return;
     var righe = bulkDraft.split(/[\n,;]+/).map(function(t){ return maiusc(t.trim()); }).filter(Boolean);
     if (!righe.length){ toast('Incolla almeno un prodotto'); return; }
     if (!sel.size){ toast('Scegli almeno un negozio'); return; }
     importing = true; render();
-    var fatti = 0, falliti = 0, diSeguito = 0, stop = false;
-    for (var s of NEGOZI){
-      if (!sel.has(s) || stop) continue;
-      var visti = new Set();
-      for (var nome of righe){
-        var k = nome.toLowerCase();
-        if (visti.has(k) || esiste(s, nome)) continue;
-        visti.add(k);
-        var ok = await create({nome: nome, negozio: s, inLista: false, preso: false, prezzo: null, creato: Date.now()});
-        if (!ok){
-          falliti++; diSeguito++;
-          if (diSeguito >= 3){ stop = true; break; }
-          continue;
+    var fatti = 0, falliti = 0;
+    if (local || !dbRef){
+      var diSeguito = 0, stop = false;
+      for (var s of NEGOZI){
+        if (!sel.has(s) || stop) continue;
+        var visti = new Set();
+        for (var nome of righe){
+          var k = nome.toLowerCase();
+          if (visti.has(k) || esiste(s, nome)) continue;
+          visti.add(k);
+          var ok = await create({nome: nome, negozio: s, inLista: false, preso: false, prezzo: null, creato: Date.now()});
+          if (!ok){ falliti++; diSeguito++; if (diSeguito >= 3){ stop = true; break; } continue; }
+          diSeguito = 0; fatti++;
         }
-        diSeguito = 0;
-        fatti++;
       }
+    } else {
+      var r = await importaBatch(righe);
+      fatti = r.fatti; falliti = r.falliti;
     }
     importing = false;
-    if (stop){ toast('Ne ho aggiunti ' + fatti + ', poi la connessione si è persa. Riincolla la lista: quelli già presenti si saltano.'); }
-    else if (falliti){ toast('Aggiunti ' + fatti + ', ma ' + falliti + ' non sono andati a buon fine. Riprova a incollare la lista.'); }
+    if (falliti && !fatti){ toast('Non sono riuscito a salvare: controlla la connessione e ripeti.'); }
+    else if (falliti){ toast('Aggiunti ' + fatti + ' in un gruppo, un altro gruppo non è andato a buon fine. Ripeti per completare.'); }
     else { bulkDraft = ''; toast(fatti ? fatti + (fatti === 1 ? ' prodotto aggiunto' : ' prodotti aggiunti') : 'Erano già tutti in archivio'); }
     render();
   }
@@ -581,6 +606,7 @@ var firebaseConfig = {
       var fbApp = firebase.initializeApp(firebaseConfig);
       db = firebase.firestore(fbApp);
       db.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false });
+      dbRef = db;
     } catch(e){ status = 'errore'; loaded = true; render(); return; }
     col = db.collection('prodotti');
     col.onSnapshot(function(snap){
