@@ -7,8 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <style>
 :root{
   box-sizing:border-box;
@@ -148,7 +146,6 @@ var firebaseConfig = {
   var loaded = false;
   var local = false;
   var writable = true;
-  var col = null;
   var draft = '';
   var sel = new Set(['Coop']);
   var confDel = null;
@@ -162,7 +159,10 @@ var firebaseConfig = {
   var confSvuota = 0;
   var svuotando = false;
   var dirty = false;
-  var dbRef = null;
+  var PROJECT_ID = '';
+  var API_KEY = '';
+  var API_BASE = '';
+  var pollTimer = null;
   var queues = {};
   var toastTimer;
 
@@ -208,6 +208,56 @@ var firebaseConfig = {
     toastTimer = setTimeout(function(){ t.hidden = true; }, 3400);
   }
 
+  /* ---------- Firestore via chiamate REST semplici (niente SDK, niente canale streaming) ---------- */
+  function genId(){
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    var s = '';
+    for (var i = 0; i < 20; i++) s += chars.charAt(Math.floor(Math.random() * chars.length));
+    return s;
+  }
+  function toFields(obj){
+    var f = {};
+    Object.keys(obj).forEach(function(k){
+      var v = obj[k];
+      if (v === null || v === undefined) f[k] = {nullValue: null};
+      else if (typeof v === 'boolean') f[k] = {booleanValue: v};
+      else if (typeof v === 'number') f[k] = Number.isInteger(v) ? {integerValue: String(v)} : {doubleValue: v};
+      else f[k] = {stringValue: String(v)};
+    });
+    return f;
+  }
+  function fromFields(fields){
+    var o = {};
+    Object.keys(fields || {}).forEach(function(k){
+      var v = fields[k] || {};
+      if ('booleanValue' in v) o[k] = v.booleanValue;
+      else if ('integerValue' in v) o[k] = parseInt(v.integerValue, 10);
+      else if ('doubleValue' in v) o[k] = v.doubleValue;
+      else if ('stringValue' in v) o[k] = v.stringValue;
+      else o[k] = null;
+    });
+    return o;
+  }
+  function fsFetch(path, opts, ms){
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var t = ctrl && setTimeout(function(){ ctrl.abort(); }, ms || 8000);
+    var sep = path.indexOf('?') >= 0 ? '&' : '?';
+    var url = API_BASE + path + sep + 'key=' + encodeURIComponent(API_KEY);
+    var o = Object.assign({}, opts || {});
+    if (ctrl) o.signal = ctrl.signal;
+    return fetch(url, o).then(function(res){
+      if (t) clearTimeout(t);
+      if (!res.ok){
+        var code = res.status === 403 ? 'permission-denied' : res.status === 404 ? 'not-found' : res.status === 429 ? 'resource-exhausted' : 'error';
+        return res.text().then(function(){ var err = new Error('fs'); err.code = code; throw err; });
+      }
+      return res.status === 204 ? null : res.json();
+    }, function(e){
+      if (t) clearTimeout(t);
+      var err = new Error('fs'); err.code = (e && e.name === 'AbortError') ? 'timeout' : 'network'; throw err;
+    });
+  }
+
   /* ---------- scrittura dati ---------- */
   async function onWriteError(e, id){
     if (e && e.code === 'not-found'){
@@ -226,30 +276,29 @@ var firebaseConfig = {
     if (it) Object.assign(it, patch);
     render();
     if (local) return Promise.resolve();
-    var run = function(){ return col.doc(id).update(patch).catch(function(err){ return onWriteError(err, id); }); };
+    var run = function(){
+      var qs = Object.keys(patch).map(function(k){ return 'updateMask.fieldPaths=' + encodeURIComponent(k); }).join('&');
+      return fsFetch('/prodotti/' + id + '?' + qs, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fields: toFields(patch)})})
+        .catch(function(err){ return onWriteError(err, id); });
+    };
     queues[id] = (queues[id] || Promise.resolve()).then(run);
     return queues[id];
-  }
-  function withTimeout(p, ms){
-    return new Promise(function(resolve, reject){
-      var done = false;
-      var t = setTimeout(function(){ if (!done){ done = true; reject({code:'timeout'}); } }, ms);
-      p.then(function(v){ if (!done){ done = true; clearTimeout(t); resolve(v); } },
-             function(e){ if (!done){ done = true; clearTimeout(t); reject(e); } });
-    });
   }
   async function create(data){
     if (local){
       items.push(Object.assign({id: 'l' + Date.now() + Math.random().toString(36).slice(2,6)}, data));
       return true;
     }
-    try { await withTimeout(col.add(data), 8000); return true; } catch(e){ await onWriteError(e, null); return false; }
+    try {
+      await fsFetch('/prodotti?documentId=' + genId(), {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fields: toFields(data)})}, 8000);
+      return true;
+    } catch(e){ await onWriteError(e, null); return false; }
   }
   async function remove(item){
     if (local){ items = items.filter(function(x){ return x.id !== item.id; }); render(); return; }
     items = items.filter(function(x){ return x.id !== item.id; });
     render();
-    try { await col.doc(item.id).delete(); } catch(e){ await onWriteError(e, item.id); }
+    try { await fsFetch('/prodotti/' + item.id, {method:'DELETE'}, 8000); } catch(e){ await onWriteError(e, item.id); }
   }
 
   /* ---------- azioni ---------- */
@@ -270,13 +319,16 @@ var firebaseConfig = {
       }
     }
     if (!toAdd.length) return {fatti:0, falliti:0};
-    var CH = 400, fatti = 0, falliti = 0;
+    var CH = 300, fatti = 0, falliti = 0;
     for (var i = 0; i < toAdd.length; i += CH){
       var chunk = toAdd.slice(i, i + CH);
-      var batch = dbRef.batch();
-      chunk.forEach(function(data){ batch.set(col.doc(), data); });
-      try { await withTimeout(batch.commit(), 20000); fatti += chunk.length; }
-      catch(e){ falliti += chunk.length; }
+      var writes = chunk.map(function(data){
+        return {update: {name: 'projects/' + PROJECT_ID + '/databases/(default)/documents/prodotti/' + genId(), fields: toFields(data)}};
+      });
+      try {
+        await fsFetch(':commit', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({writes: writes})}, 25000);
+        fatti += chunk.length;
+      } catch(e){ falliti += chunk.length; }
     }
     return {fatti: fatti, falliti: falliti};
   }
@@ -287,7 +339,7 @@ var firebaseConfig = {
     if (!sel.size){ toast('Scegli almeno un negozio'); return; }
     importing = true; render();
     var fatti = 0, falliti = 0;
-    if (local || !dbRef){
+    if (local || !PROJECT_ID){
       var diSeguito = 0, stop = false;
       for (var s of NEGOZI){
         if (!sel.has(s) || stop) continue;
@@ -596,31 +648,36 @@ var firebaseConfig = {
   });
 
   /* ---------- avvio ---------- */
+  async function caricaTutto(){
+    try {
+      var data = await fsFetch('/prodotti?pageSize=1000', {method:'GET'}, 10000);
+      var docs = (data && data.documents) || [];
+      items = docs.map(function(d){
+        var id = d.name.split('/').pop();
+        var v = fromFields(d.fields);
+        return {id:id, nome:String(v.nome || ''), negozio:v.negozio, inLista:!!v.inLista, preso:!!v.preso,
+                prezzo: typeof v.prezzo === 'number' ? v.prezzo : null};
+      }).filter(function(i){ return i.nome && NEGOZI.indexOf(i.negozio) !== -1; });
+      loaded = true;
+      if (status === 'connessione' || status === 'errore') status = 'ok';
+      scheduleRender();
+    } catch(e){
+      if (e && e.code === 'permission-denied'){ writable = false; status = 'lettura'; }
+      else if (!loaded){ status = 'errore'; }
+      loaded = true; render();
+    }
+  }
   async function init(){
     render();
     if (!firebaseConfig || firebaseConfig.apiKey === 'INCOLLA_QUI'){
       status = 'setup'; loaded = true; render(); return;
     }
-    var db;
-    try {
-      var fbApp = firebase.initializeApp(firebaseConfig);
-      db = firebase.firestore(fbApp);
-      db.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false });
-      dbRef = db;
-    } catch(e){ status = 'errore'; loaded = true; render(); return; }
-    col = db.collection('prodotti');
-    col.onSnapshot(function(snap){
-      items = snap.docs.map(function(d){
-        var v = d.data() || {};
-        return {id:d.id, nome:String(v.nome || ''), negozio:v.negozio, inLista:!!v.inLista, preso:!!v.preso,
-                prezzo: typeof v.prezzo === 'number' ? v.prezzo : null};
-      }).filter(function(i){ return i.nome && NEGOZI.indexOf(i.negozio) !== -1; });
-      loaded = true;
-      if (status === 'connessione') status = 'ok';
-      scheduleRender();
-    }, function(){
-      status = 'errore'; loaded = true; render();
-    });
+    PROJECT_ID = firebaseConfig.projectId;
+    API_KEY = firebaseConfig.apiKey;
+    API_BASE = 'https://firestore.googleapis.com/v1/projects/' + PROJECT_ID + '/databases/(default)/documents';
+    await caricaTutto();
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(caricaTutto, 4000);
   }
   init();
 })();
