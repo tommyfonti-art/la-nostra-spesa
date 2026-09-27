@@ -229,12 +229,20 @@ var firebaseConfig = {
     queues[id] = (queues[id] || Promise.resolve()).then(run);
     return queues[id];
   }
+  function withTimeout(p, ms){
+    return new Promise(function(resolve, reject){
+      var done = false;
+      var t = setTimeout(function(){ if (!done){ done = true; reject({code:'timeout'}); } }, ms);
+      p.then(function(v){ if (!done){ done = true; clearTimeout(t); resolve(v); } },
+             function(e){ if (!done){ done = true; clearTimeout(t); reject(e); } });
+    });
+  }
   async function create(data){
     if (local){
       items.push(Object.assign({id: 'l' + Date.now() + Math.random().toString(36).slice(2,6)}, data));
       return true;
     }
-    try { await col.add(data); return true; } catch(e){ await onWriteError(e, null); return false; }
+    try { await withTimeout(col.add(data), 8000); return true; } catch(e){ await onWriteError(e, null); return false; }
   }
   async function remove(item){
     if (local){ items = items.filter(function(x){ return x.id !== item.id; }); render(); return; }
@@ -572,6 +580,7 @@ var firebaseConfig = {
     try {
       var fbApp = firebase.initializeApp(firebaseConfig);
       db = firebase.firestore(fbApp);
+      db.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false });
     } catch(e){ status = 'errore'; loaded = true; render(); return; }
     col = db.collection('prodotti');
     col.onSnapshot(function(snap){
