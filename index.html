@@ -159,6 +159,8 @@ var firebaseConfig = {
   var editDraft = '';
   var bulkDraft = '';
   var importing = false;
+  var confSvuota = 0;
+  var svuotando = false;
   var dirty = false;
   var queues = {};
   var toastTimer;
@@ -235,8 +237,9 @@ var firebaseConfig = {
     try { await col.add(data); return true; } catch(e){ await onWriteError(e, null); return false; }
   }
   async function remove(item){
-    confDel = null;
     if (local){ items = items.filter(function(x){ return x.id !== item.id; }); render(); return; }
+    items = items.filter(function(x){ return x.id !== item.id; });
+    render();
     try { await col.doc(item.id).delete(); } catch(e){ await onWriteError(e, item.id); }
   }
 
@@ -275,7 +278,7 @@ var firebaseConfig = {
     else { bulkDraft = ''; toast(fatti ? fatti + (fatti === 1 ? ' prodotto aggiunto' : ' prodotti aggiunti') : 'Erano già tutti in archivio'); }
     render();
   }
-  function iniziaRinomina(i){ editId = i.id; editDraft = i.nome; confDel = null; refocusRename = true; render(); }
+  function iniziaRinomina(i){ editId = i.id; editDraft = i.nome; refocusRename = true; render(); }
   function annullaRinomina(){ editId = null; render(); }
   async function salvaRinomina(i){
     var nome = maiusc(editDraft.trim());
@@ -313,6 +316,15 @@ var firebaseConfig = {
     var presi = items.filter(function(i){ return i.inLista && i.preso; });
     for (var i of presi){ await save(i.id, {inLista:false, preso:false, prezzo:null}); }
     toast('Spesa conclusa');
+    render();
+  }
+  async function svuotaArchivio(){
+    if (!writable || svuotando) return;
+    svuotando = true; confSvuota = 0; render();
+    var tutti = items.slice();
+    for (var i of tutti){ await remove(i); }
+    svuotando = false;
+    toast('Archivio svuotato');
     render();
   }
 
@@ -401,7 +413,6 @@ var firebaseConfig = {
 
   function rowArchivio(i){
     var ro = !writable;
-    var sure = confDel === i.id;
     if (editId === i.id){
       return h('div', {class:'row edit'},
         h('input', {id:'rinomina', class:'campo', type:'text', autocomplete:'off', enterkeyhint:'done', 'aria-label':'Nuovo nome di ' + i.nome, value: editDraft,
@@ -424,9 +435,8 @@ var firebaseConfig = {
       ),
       h('button', {class:'trash edit', type:'button', 'aria-label':'Cambia nome a ' + i.nome, disabled: ro,
         onclick:function(){ iniziaRinomina(i); }}, svg(ICON_EDIT)),
-      h('button', {class:'trash' + (sure ? ' sure' : ''), type:'button', 'aria-label':'Elimina ' + i.nome, disabled: ro,
-        onclick:function(){ if (sure){ remove(i); } else { confDel = i.id; render(); } }},
-        sure ? 'Elimina?' : svg(ICON_TRASH))
+      h('button', {class:'trash', type:'button', 'aria-label':'Elimina ' + i.nome, disabled: ro,
+        onclick:function(){ remove(i); }}, svg(ICON_TRASH))
     );
   }
 
@@ -469,12 +479,35 @@ var firebaseConfig = {
         g.map(rowArchivio)
       ));
     });
+    if (writable){
+      if (confSvuota === 0){
+        box.append(h('div', {class:'fine'},
+          h('button', {class:'btn soft', type:'button', disabled: svuotando, onclick:function(){ confSvuota = 1; render(); }}, 'Svuota l’archivio')
+        ));
+      } else if (confSvuota === 1){
+        box.append(h('div', {class:'fine'},
+          h('p', null, 'Vuoi eliminare tutti i ' + items.length + (items.length === 1 ? ' prodotto' : ' prodotti') + ' dall’archivio, in tutti i negozi?'),
+          h('div', {class:'btn-row'},
+            h('button', {class:'trash sure', type:'button', onclick:function(){ confSvuota = 2; render(); }}, 'Sì, continua'),
+            h('button', {class:'btn soft', type:'button', onclick:function(){ confSvuota = 0; render(); }}, 'Annulla')
+          )
+        ));
+      } else {
+        box.append(h('div', {class:'fine'},
+          h('p', null, 'Sicuro? Non si può annullare: la lista e l’archivio si svuotano per te e per lei.'),
+          h('div', {class:'btn-row'},
+            h('button', {class:'trash sure', type:'button', disabled: svuotando, onclick:svuotaArchivio}, svuotando ? 'Sto eliminando…' : 'Sì, elimina tutto'),
+            h('button', {class:'btn soft', type:'button', disabled: svuotando, onclick:function(){ confSvuota = 0; render(); }}, 'Annulla')
+          )
+        ));
+      }
+    }
     return box;
   }
 
   function tabBtn(id, label){
     return h('button', {class:'tab', type:'button', role:'tab', 'aria-selected': tab === id ? 'true' : 'false',
-      onclick:function(){ tab = id; confDel = null; confermaFine = false; render(); window.scrollTo(0,0); }}, label);
+      onclick:function(){ tab = id; confermaFine = false; confSvuota = 0; render(); window.scrollTo(0,0); }}, label);
   }
   function dockContent(){
     var out = [];
