@@ -251,7 +251,7 @@ var firebaseConfig = {
     if (!righe.length){ toast('Incolla almeno un prodotto'); return; }
     if (!sel.size){ toast('Scegli almeno un negozio'); return; }
     importing = true; render();
-    var fatti = 0, stop = false;
+    var fatti = 0, falliti = 0, diSeguito = 0, stop = false;
     for (var s of NEGOZI){
       if (!sel.has(s) || stop) continue;
       var visti = new Set();
@@ -260,12 +260,18 @@ var firebaseConfig = {
         if (visti.has(k) || esiste(s, nome)) continue;
         visti.add(k);
         var ok = await create({nome: nome, negozio: s, inLista: false, preso: false, prezzo: null, creato: Date.now()});
-        if (!ok){ stop = true; break; }
+        if (!ok){
+          falliti++; diSeguito++;
+          if (diSeguito >= 3){ stop = true; break; }
+          continue;
+        }
+        diSeguito = 0;
         fatti++;
       }
     }
     importing = false;
-    if (stop){ toast('Ne ho aggiunti ' + fatti + ', poi mi sono fermato. Riincolla la lista: quelli già presenti si saltano.'); }
+    if (stop){ toast('Ne ho aggiunti ' + fatti + ', poi la connessione si è persa. Riincolla la lista: quelli già presenti si saltano.'); }
+    else if (falliti){ toast('Aggiunti ' + fatti + ', ma ' + falliti + ' non sono andati a buon fine. Riprova a incollare la lista.'); }
     else { bulkDraft = ''; toast(fatti ? fatti + (fatti === 1 ? ' prodotto aggiunto' : ' prodotti aggiunti') : 'Erano già tutti in archivio'); }
     render();
   }
