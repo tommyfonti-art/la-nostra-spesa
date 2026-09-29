@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="La spesa">
 <meta name="theme-color" content="#C42B28">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
@@ -44,7 +44,8 @@
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Nunito,ui-rounded,"Avenir Next Rounded","Segoe UI",system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+html{touch-action:manipulation}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Nunito,ui-rounded,"Avenir Next Rounded","Segoe UI",system-ui,sans-serif;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 h1,h2,.num{font-family:Fredoka,ui-rounded,"Avenir Next Rounded",system-ui,sans-serif;font-weight:600}
 main{max-width:560px;margin:0 auto;padding:20px 16px 210px}
 .top{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
