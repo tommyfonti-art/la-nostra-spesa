@@ -180,7 +180,6 @@ var firebaseConfig = {
 
   /* ---------- categorie automatiche (per l'ordinamento in Archivio) ---------- */
   var CATEGORIE = [
-    {nome:'Frutta e verdura', chiavi:['frutta','mela','mele','banana','pera','pere','arancia','arance','limone','limoni','uva','pesca','pesche','fragola','fragole','melone','anguria','kiwi','ananas','verdura','insalata','pomodoro','pomodorini','zucchina','zucchine','melanzana','melanzane','peperone','peperoni','carota','carote','cipolla','cipolle','patata','patate','aglio','sedano','cavolo','broccolo','broccoli','spinaci','funghi','scalogno','cetriolo','cetrioli','rucola','basilico','prezzemolo','mandarino','mandarini']},
     {nome:'Carne e pesce', chiavi:['carne','pollo','manzo','maiale','tacchino','salsiccia','salsicce','salame','prosciutto','salumi','pesce','tonno','salmone','gamberi','alici','bresaola','wurstel','hamburger','polpette']},
     {nome:'Latticini e uova', chiavi:['latte','yogurt','formaggio','mozzarella','mozilla','parmigiano','grana','burro','panna','uova','uovo','ricotta','stracchino','philadelphia','sottilette']},
     {nome:'Pane e colazione', chiavi:['pane','fette biscottate','cereali','biscotti','marmellata','miele','caffè','caffe','tè','the','cornetti','brioche','cracker','grissini','taralli','tarallini','piadine','fiocchi avena']},
@@ -188,15 +187,29 @@ var firebaseConfig = {
     {nome:'Dolci e snack', chiavi:['dolci','dolcetti','cioccolato','gelato','merendine','patatine','snack','caramelle','nutella']},
     {nome:'Bevande', chiavi:['acqua','vino','birra','succo','bibita','coca cola','aranciata']},
     {nome:'Pulizia casa', chiavi:['detersivo','detersivi','det.','ammorbidente','brillantante','candeggina','sgrassatore','scottex','carta igienica','sacchetti','spugna','wc gel','coccolino','mistermuscolo','bioform','profumo asciugatrice','pellicola','stagnola']},
-    {nome:'Igiene personale', chiavi:['shampoo','bagnoschiuma','dentifricio','spazzolino','deodorante','cottonfioc','cotton fioc','assorbenti','sapone','acetone','delicata']}
+    {nome:'Igiene personale', chiavi:['shampoo','bagnoschiuma','dentifricio','spazzolino','deodorante','cottonfioc','cotton fioc','assorbenti','sapone','acetone','delicata']},
+    {nome:'Frutta e verdura', chiavi:['frutta','mela','mele','banana','pera','pere','arancia','arance','limone','limoni','uva','pesca','pesche','fragola','fragole','melone','anguria','kiwi','ananas','verdura','insalata','pomodoro','pomodorini','zucchina','zucchine','melanzana','melanzane','peperone','peperoni','carota','carote','cipolla','cipolle','patata','patate','aglio','sedano','cavolo','broccolo','broccoli','spinaci','funghi','scalogno','cetriolo','cetrioli','rucola','basilico','prezzemolo','mandarino','mandarini']}
   ];
   var ORDINE_CATEGORIE = CATEGORIE.map(function(c){ return c.nome; }).concat(['Altro']);
+  // "Frutta e verdura" è messa per ultima apposta: se un prodotto contiene sia una
+  // parola di frutta/verdura sia una parola più specifica di un'altra categoria
+  // (es. "Aceto di mele" → aceto + mele), vince la categoria più specifica.
+  // Il confronto è per parola intera, non per sottostringa: "Acetone" non deve
+  // finire tra i condimenti solo perché contiene le lettere di "Aceto".
+  function paroleIntere(testo, chiave){
+    if (chiave.indexOf(' ') !== -1 || chiave.indexOf('.') !== -1){
+      return testo.indexOf(chiave) !== -1;
+    }
+    var esc = chiave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    var re = new RegExp('(^|[^a-zàèéìòù])' + esc + '([^a-zàèéìòù]|$)', 'i');
+    return re.test(testo);
+  }
   function categoria(nome){
     var n = (nome || '').toLowerCase();
     for (var i = 0; i < CATEGORIE.length; i++){
       var c = CATEGORIE[i];
       for (var j = 0; j < c.chiavi.length; j++){
-        if (n.indexOf(c.chiavi[j]) !== -1) return c.nome;
+        if (paroleIntere(n, c.chiavi[j])) return c.nome;
       }
     }
     return 'Altro';
@@ -500,17 +513,35 @@ var firebaseConfig = {
       ));
       return box;
     }
+    box.append(h('div', {class:'btn-row'},
+      h('button', {class:'btn soft sm', type:'button', onclick:function(){ ordinaCategoria = !ordinaCategoria; render(); }},
+        ordinaCategoria ? 'Torna all’ordine alfabetico' : 'Ordina per categoria')
+    ));
     NEGOZI.forEach(function(s){
-      var g = lista.filter(function(i){ return i.negozio === s; }).sort(byNome);
+      var g = lista.filter(function(i){ return i.negozio === s; });
       if (!g.length) return;
       var presi = g.filter(function(i){ return i.preso; });
       var sub = sum(presi);
+      var righe;
+      if (ordinaCategoria){
+        g = g.slice().sort(byCategoria);
+        righe = [];
+        var catPrec = null;
+        g.forEach(function(i){
+          var c = categoria(i.nome);
+          if (c !== catPrec){ righe.push(h('div', {class:'cat-sub'}, c)); catPrec = c; }
+          righe.push(rowSpesa(i));
+        });
+      } else {
+        g = g.slice().sort(byNome);
+        righe = g.map(rowSpesa);
+      }
       box.append(h('section', {class:'card ' + CLS[s]},
         h('header', {class:'card-h'},
           h('h2', null, s),
           h('span', {class:'meta'}, h('span', null, presi.length + ' di ' + g.length), sub > 0 ? h('b', null, fmt(sub)) : null)
         ),
-        g.map(rowSpesa)
+        righe
       ));
     });
     var nPresi = lista.filter(function(i){ return i.preso; }).length;
