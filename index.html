@@ -88,6 +88,7 @@ textarea.campo{resize:vertical;min-height:120px;line-height:1.45}
 .row.edit{flex-wrap:wrap;padding:10px 8px}
 .row.edit .campo{flex:1 1 100%}
 .hint{margin:0;font-size:14px;color:var(--ink-soft)}
+.cat-sub{padding:10px 8px 2px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--ink-soft)}
 .trash.edit{min-width:42px}
 .btn-row{display:flex;gap:10px;flex-wrap:wrap}
 :disabled{opacity:.5;cursor:not-allowed}
@@ -158,6 +159,7 @@ var firebaseConfig = {
   var importing = false;
   var confSvuota = 0;
   var svuotando = false;
+  var ordinaCategoria = false;
   var dirty = false;
   var PROJECT_ID = '';
   var API_KEY = '';
@@ -170,6 +172,36 @@ var firebaseConfig = {
   function fmt(n){ return eur.format(n || 0); }
   function sum(list){ return list.reduce(function(s,i){ return s + (i.prezzo || 0); }, 0); }
   function byNome(a,b){ return a.nome.localeCompare(b.nome, 'it', {sensitivity:'base'}); }
+
+  /* ---------- categorie automatiche (per l'ordinamento in Archivio) ---------- */
+  var CATEGORIE = [
+    {nome:'Frutta e verdura', chiavi:['frutta','mela','mele','banana','pera','pere','arancia','arance','limone','limoni','uva','pesca','pesche','fragola','fragole','melone','anguria','kiwi','ananas','verdura','insalata','pomodoro','pomodorini','zucchina','zucchine','melanzana','melanzane','peperone','peperoni','carota','carote','cipolla','cipolle','patata','patate','aglio','sedano','cavolo','broccolo','broccoli','spinaci','funghi','scalogno','cetriolo','cetrioli','rucola','basilico','prezzemolo','mandarino','mandarini']},
+    {nome:'Carne e pesce', chiavi:['carne','pollo','manzo','maiale','tacchino','salsiccia','salsicce','salame','prosciutto','salumi','pesce','tonno','salmone','gamberi','alici','bresaola','wurstel','hamburger','polpette']},
+    {nome:'Latticini e uova', chiavi:['latte','yogurt','formaggio','mozzarella','mozilla','parmigiano','grana','burro','panna','uova','uovo','ricotta','stracchino','philadelphia','sottilette']},
+    {nome:'Pane e colazione', chiavi:['pane','fette biscottate','cereali','biscotti','marmellata','miele','caffè','caffe','tè','the','cornetti','brioche','cracker','grissini','taralli','tarallini','piadine','fiocchi avena']},
+    {nome:'Pasta riso e dispensa', chiavi:['pasta','riso','farina','zucchero','sale','olio','aceto','legumi','fagioli','lenticchie','ceci','farro','orzo','passata','pelati','mais','olive','capperi','lievito','dado','brodo','semi']},
+    {nome:'Dolci e snack', chiavi:['dolci','dolcetti','cioccolato','gelato','merendine','patatine','snack','caramelle','nutella']},
+    {nome:'Bevande', chiavi:['acqua','vino','birra','succo','bibita','coca cola','aranciata']},
+    {nome:'Pulizia casa', chiavi:['detersivo','detersivi','det.','ammorbidente','brillantante','candeggina','sgrassatore','scottex','carta igienica','sacchetti','spugna','wc gel','coccolino','mistermuscolo','bioform','profumo asciugatrice','pellicola','stagnola']},
+    {nome:'Igiene personale', chiavi:['shampoo','bagnoschiuma','dentifricio','spazzolino','deodorante','cottonfioc','cotton fioc','assorbenti','sapone','acetone','delicata']}
+  ];
+  var ORDINE_CATEGORIE = CATEGORIE.map(function(c){ return c.nome; }).concat(['Altro']);
+  function categoria(nome){
+    var n = (nome || '').toLowerCase();
+    for (var i = 0; i < CATEGORIE.length; i++){
+      var c = CATEGORIE[i];
+      for (var j = 0; j < c.chiavi.length; j++){
+        if (n.indexOf(c.chiavi[j]) !== -1) return c.nome;
+      }
+    }
+    return 'Altro';
+  }
+  function byCategoria(a, b){
+    var ca = ORDINE_CATEGORIE.indexOf(categoria(a.nome));
+    var cb = ORDINE_CATEGORIE.indexOf(categoria(b.nome));
+    if (ca !== cb) return ca - cb;
+    return byNome(a, b);
+  }
 
   function h(tag, props){
     var el = document.createElement(tag);
@@ -556,12 +588,32 @@ var firebaseConfig = {
       ));
       return box;
     }
+    if (items.length){
+      box.append(h('div', {class:'btn-row'},
+        h('button', {class:'btn soft sm', type:'button', onclick:function(){ ordinaCategoria = !ordinaCategoria; render(); }},
+          ordinaCategoria ? 'Torna all’ordine alfabetico' : 'Ordina per categoria')
+      ));
+    }
     NEGOZI.forEach(function(s){
-      var g = items.filter(function(i){ return i.negozio === s; }).sort(byNome);
+      var g = items.filter(function(i){ return i.negozio === s; });
       if (!g.length) return;
+      var righe;
+      if (ordinaCategoria){
+        g = g.slice().sort(byCategoria);
+        righe = [];
+        var catPrec = null;
+        g.forEach(function(i){
+          var c = categoria(i.nome);
+          if (c !== catPrec){ righe.push(h('div', {class:'cat-sub'}, c)); catPrec = c; }
+          righe.push(rowArchivio(i));
+        });
+      } else {
+        g = g.slice().sort(byNome);
+        righe = g.map(rowArchivio);
+      }
       box.append(h('section', {class:'card ' + CLS[s]},
         h('header', {class:'card-h'}, h('h2', null, s), h('span', {class:'meta'}, g.length + (g.length === 1 ? ' prodotto' : ' prodotti'))),
-        g.map(rowArchivio)
+        righe
       ));
     });
     if (writable){
