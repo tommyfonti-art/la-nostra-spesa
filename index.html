@@ -23,6 +23,7 @@
   --tigota:#D6D3F4; --tigota-ink:#3F3870;
   --lidl:#F8E8B4; --lidl-ink:#66571A;
   --warn-bg:#F3CFCF; --warn-ink:#6B2E2E;
+  --p1:#CDE8C9; --p1-ink:#2F5A2B; --p2:#C9E2F2; --p2-ink:#2B4F66; --p3:#F7D9BE; --p3-ink:#6B4220; --p4:#F1CDE6; --p4-ink:#6B2F5A; --p5:#DADDE0; --p5-ink:#3A4247;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -32,6 +33,7 @@
     --tigota:#403D66; --tigota-ink:#D6D3F4;
     --lidl:#5A5028; --lidl-ink:#F8E8B4;
     --warn-bg:#6A3A3A; --warn-ink:#F7D6D6;
+    --p1:#3A5A38; --p1-ink:#D4EED0; --p2:#2F4A5E; --p2-ink:#CFE6F5; --p3:#5E4128; --p3-ink:#F7DDC6; --p4:#5A3450; --p4-ink:#F3D4EA; --p5:#3E454A; --p5-ink:#E0E3E6;
   }
 }
 :root[data-theme="dark"]{
@@ -41,6 +43,7 @@
   --tigota:#403D66; --tigota-ink:#D6D3F4;
   --lidl:#5A5028; --lidl-ink:#F8E8B4;
   --warn-bg:#6A3A3A; --warn-ink:#F7D6D6;
+    --p1:#3A5A38; --p1-ink:#D4EED0; --p2:#2F4A5E; --p2-ink:#CFE6F5; --p3:#5E4128; --p3-ink:#F7DDC6; --p4:#5A3450; --p4-ink:#F3D4EA; --p5:#3E454A; --p5-ink:#E0E3E6;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:border-box}
@@ -63,6 +66,24 @@ h1{font-size:30px;margin:0;line-height:1.1}
 .st-coop{--st:var(--coop);--st-ink:var(--coop-ink)}
 .st-tigota{--st:var(--tigota);--st-ink:var(--tigota-ink)}
 .st-lidl{--st:var(--lidl);--st-ink:var(--lidl-ink)}
+.st-p1{--st:var(--p1);--st-ink:var(--p1-ink)}
+.st-p2{--st:var(--p2);--st-ink:var(--p2-ink)}
+.st-p3{--st:var(--p3);--st-ink:var(--p3-ink)}
+.st-p4{--st:var(--p4);--st-ink:var(--p4-ink)}
+.st-p5{--st:var(--p5);--st-ink:var(--p5-ink)}
+.negozio-riga{display:flex;align-items:center;gap:10px;padding:8px}
+.negozio-riga+.negozio-riga{border-top:1.5px solid var(--line)}
+.pallino{flex:none;width:28px;height:28px;border-radius:50%;background:var(--st);border:2px solid var(--st-ink)}
+.colori{display:flex;flex-wrap:wrap;gap:10px}
+.colore{width:44px;height:44px;border-radius:50%;background:var(--st);border:3px solid transparent;cursor:pointer;padding:0}
+.colore.on{border-color:var(--st-ink)}
+button.card-h{width:100%;border:0;font:inherit;text-align:left;cursor:pointer}
+button.card-h h2{font-family:Fredoka,ui-rounded,"Avenir Next Rounded",system-ui,sans-serif;font-weight:600}
+.chev{flex:none;display:inline-grid;place-items:center;width:30px;height:30px;transition:transform .2s}
+.chev.chiuso{transform:rotate(-90deg)}
+.card.compatta{padding-bottom:4px}
+.card-fine{padding:8px 8px 6px;display:flex;flex-direction:column;gap:8px}
+.card-fine p{margin:0;color:var(--ink-soft);font-size:14px}
 
 .row{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 8px;min-height:56px}
 .row+.row{border-top:1.5px solid var(--line)}
@@ -112,8 +133,8 @@ textarea.campo{resize:vertical;min-height:120px;line-height:1.45}
 .t-label{font-weight:700}
 .t-sub{font-size:14px;opacity:.85}
 .totale .num{font-size:30px;line-height:1}
-.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:5px}
-.tab{border:0;background:transparent;color:var(--ink-soft);font:inherit;font-weight:700;border-radius:999px;padding:12px;cursor:pointer;transition:background .15s}
+.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:5px}
+.tab{border:0;background:transparent;color:var(--ink-soft);font:inherit;font-weight:700;font-size:15px;border-radius:999px;padding:12px 6px;cursor:pointer;transition:background .15s}
 .tab[aria-selected="true"]{background:var(--surface-2);color:var(--ink)}
 
 .toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(12px + env(safe-area-inset-top,0px));z-index:10;max-width:calc(100% - 32px);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:700;font-size:14px;text-align:center}
@@ -141,7 +162,12 @@ var firebaseConfig = {
 };
 /* ========================================================= */
 (function(){
-  var NEGOZI = ['Coop','Tigotà','Lidl'];
+  var BASE = ['Coop','Tigotà','Lidl'];
+  var NEGOZI = BASE.slice();
+  var custom = [];
+  var nuovoNome = '';
+  var nuovoColore = 1;
+  var COLORI = ['Verde','Azzurro','Arancio','Rosa','Grigio'];
   var CLS = {'Coop':'st-coop','Tigotà':'st-tigota','Lidl':'st-lidl'};
   var app = document.getElementById('app');
   var dock = document.getElementById('dock');
@@ -154,9 +180,12 @@ var firebaseConfig = {
   var local = false;
   var writable = true;
   var draft = '';
-  var sel = new Set(['Coop']);
+  var neg = 'Coop';
   var confDel = null;
-  var confermaFine = false;
+  var confermaFine = null;
+  var chiusi = new Set();
+  try { JSON.parse(localStorage.getItem('archivioChiusi') || '[]').forEach(function(x){ chiusi.add(x); }); } catch(_){}
+  function salvaChiusi(){ try { localStorage.setItem('archivioChiusi', JSON.stringify(Array.from(chiusi))); } catch(_){} }
   var refocusName = false;
   var refocusRename = false;
   var editId = null;
@@ -251,6 +280,12 @@ var firebaseConfig = {
   var ICON_CHECK = 'M5 12.5l4.5 4.5L19 7.5';
   var ICON_EDIT = 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4';
   var ICON_TRASH = 'M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13';
+
+  function applicaNegozi(){
+    NEGOZI.length = 0;
+    BASE.forEach(function(n){ NEGOZI.push(n); });
+    custom.forEach(function(c){ if (NEGOZI.indexOf(c.nome) === -1){ NEGOZI.push(c.nome); CLS[c.nome] = 'st-p' + c.colore; } });
+  }
 
   function toast(msg){
     var t = document.getElementById('toast');
@@ -359,8 +394,7 @@ var firebaseConfig = {
   }
   async function importaBatch(righe){
     var toAdd = [];
-    for (var s of NEGOZI){
-      if (!sel.has(s)) continue;
+    for (var s of [neg]){
       var visti = new Set();
       for (var nome of righe){
         var k = nome.toLowerCase();
@@ -387,13 +421,12 @@ var firebaseConfig = {
     if (!writable || importing) return;
     var righe = bulkDraft.split(/[\n,;]+/).map(function(t){ return maiusc(t.trim()); }).filter(Boolean);
     if (!righe.length){ toast('Incolla almeno un prodotto'); return; }
-    if (!sel.size){ toast('Scegli almeno un negozio'); return; }
     importing = true; render();
     var fatti = 0, falliti = 0;
     if (local || !PROJECT_ID){
       var diSeguito = 0, stop = false;
-      for (var s of NEGOZI){
-        if (!sel.has(s) || stop) continue;
+      for (var s of [neg]){
+        if (stop) continue;
         var visti = new Set();
         for (var nome of righe){
           var k = nome.toLowerCase();
@@ -429,10 +462,8 @@ var firebaseConfig = {
     if (!writable) return;
     var nome = maiusc(draft.trim());
     if (!nome){ toast('Scrivi il nome del prodotto'); return; }
-    if (!sel.size){ toast('Scegli almeno un negozio'); return; }
     var nuovi = 0;
-    for (var s of NEGOZI){
-      if (!sel.has(s)) continue;
+    for (var s of [neg]){
       if (esiste(s, nome)) continue;
       await create({nome: nome, negozio: s, inLista: false, preso: false, prezzo: null, creato: Date.now()});
       nuovi++;
@@ -447,11 +478,11 @@ var firebaseConfig = {
     if (!isFinite(n) || n < 0) return NaN;
     return Math.round(n * 100) / 100;
   }
-  async function concludi(){
-    confermaFine = false;
-    var presi = items.filter(function(i){ return i.inLista && i.preso; });
+  async function concludi(negozio){
+    confermaFine = null;
+    var presi = items.filter(function(i){ return i.negozio === negozio && i.inLista && i.preso; });
     for (var i of presi){ await save(i.id, {inLista:false, preso:false, prezzo:null}); }
-    toast('Spesa conclusa');
+    toast('Spesa conclusa: ' + negozio);
     render();
   }
   async function svuotaArchivio(){
@@ -537,31 +568,32 @@ var firebaseConfig = {
         g = g.slice().sort(byNome);
         righe = g.map(rowSpesa);
       }
+      var fine = null;
+      if (presi.length && writable){
+        if (confermaFine !== s){
+          fine = h('div', {class:'card-fine'},
+            h('button', {class:'btn soft', type:'button', onclick:function(){ confermaFine = s; render(); }}, 'Concludi la spesa ' + s),
+            h('p', null, 'Toglie dalla lista solo i prodotti presi di ' + s + '. Gli altri negozi non cambiano.')
+          );
+        } else {
+          fine = h('div', {class:'card-fine'},
+            h('p', null, 'Tolgo da ' + s + ' ' + presi.length + (presi.length === 1 ? ' prodotto preso' : ' prodotti presi') + '. Va bene?'),
+            h('div', {class:'btn-row'},
+              h('button', {class:'btn', type:'button', onclick:function(){ concludi(s); }}, 'Sì, concludi'),
+              h('button', {class:'btn soft', type:'button', onclick:function(){ confermaFine = null; render(); }}, 'Annulla')
+            )
+          );
+        }
+      }
       box.append(h('section', {class:'card ' + CLS[s]},
         h('header', {class:'card-h'},
           h('h2', null, s),
           h('span', {class:'meta'}, h('span', null, presi.length + ' di ' + g.length), sub > 0 ? h('b', null, fmt(sub)) : null)
         ),
-        righe
+        righe,
+        fine
       ));
     });
-    var nPresi = lista.filter(function(i){ return i.preso; }).length;
-    if (nPresi && writable){
-      if (!confermaFine){
-        box.append(h('div', {class:'fine'},
-          h('button', {class:'btn soft', type:'button', onclick:function(){ confermaFine = true; render(); }}, 'Concludi la spesa'),
-          h('p', null, 'Toglie dalla lista i prodotti presi. Quelli che non hai spuntato restano.')
-        ));
-      } else {
-        box.append(h('div', {class:'fine'},
-          h('p', null, 'Tolgo dalla lista ' + nPresi + (nPresi === 1 ? ' prodotto preso' : ' prodotti presi') + '. Va bene?'),
-          h('div', {class:'btn-row'},
-            h('button', {class:'btn', type:'button', onclick:concludi}, 'Sì, concludi'),
-            h('button', {class:'btn soft', type:'button', onclick:function(){ confermaFine = false; render(); }}, 'Annulla')
-          )
-        ));
-      }
-    }
     return box;
   }
 
@@ -603,10 +635,10 @@ var firebaseConfig = {
       h('textarea', {id:'nome', class:'campo', rows:'3', 'aria-label':'Prodotto o lista di prodotti', placeholder:'Per esempio latte, dentifricio', autocomplete:'off', enterkeyhint:'done', disabled: ro || importing,
         oninput:function(e){ bulkDraft = e.target.value; },
         onkeydown:function(e){ if (e.key === 'Enter' && !e.shiftKey && bulkDraft.indexOf('\n') === -1){ e.preventDefault(); importa(); } }}, bulkDraft),
-      h('div', {class:'chips', role:'group', 'aria-label':'Dove lo compri'},
+      h('div', {class:'chips', role:'group', 'aria-label':'Dove lo compri (uno solo)'},
         NEGOZI.map(function(s){
-          return h('button', {type:'button', class:'chip ' + CLS[s] + (sel.has(s) ? ' on' : ''), 'aria-pressed': sel.has(s) ? 'true' : 'false', disabled: ro,
-            onclick:function(){ if (sel.has(s)) sel.delete(s); else sel.add(s); render(); }}, s);
+          return h('button', {type:'button', class:'chip ' + CLS[s] + (neg === s ? ' on' : ''), 'aria-pressed': neg === s ? 'true' : 'false', disabled: ro,
+            onclick:function(){ neg = s; render(); }}, s);
         })
       ),
       h('button', {class:'btn', type:'button', disabled: ro || importing, onclick:importa}, importing ? 'Sto aggiungendo…' : 'Aggiungi all’archivio')
@@ -614,7 +646,7 @@ var firebaseConfig = {
     if (!items.length){
       box.append(h('div', {class:'vuoto'},
         h('p', {class:'titolo'}, 'L’archivio è vuoto'),
-        h('p', null, 'Scrivi un prodotto qui sopra e scegli in quali negozi lo compri. Poi ti basta un tocco per metterlo nella spesa.')
+        h('p', null, 'Scrivi un prodotto qui sopra e scegli in quale negozio lo compri. Poi ti basta un tocco per metterlo nella spesa.')
       ));
       return box;
     }
@@ -641,9 +673,16 @@ var firebaseConfig = {
         g = g.slice().sort(byNome);
         righe = g.map(rowArchivio);
       }
-      box.append(h('section', {class:'card ' + CLS[s]},
-        h('header', {class:'card-h'}, h('h2', null, s), h('span', {class:'meta'}, g.length + (g.length === 1 ? ' prodotto' : ' prodotti'))),
-        righe
+      var chiuso = chiusi.has(s);
+      var chev = h('span', {class:'chev' + (chiuso ? ' chiuso' : ''), 'aria-hidden':'true'}, svg('M6 9l6 6 6-6'));
+      box.append(h('section', {class:'card ' + CLS[s] + (chiuso ? ' compatta' : '')},
+        h('button', {class:'card-h', type:'button', 'aria-expanded': chiuso ? 'false' : 'true',
+          'aria-label': (chiuso ? 'Apri' : 'Chiudi') + ' l’elenco ' + s,
+          onclick:function(){ if (chiusi.has(s)) chiusi.delete(s); else chiusi.add(s); salvaChiusi(); render(); }},
+          h('h2', null, s),
+          h('span', {class:'meta'}, g.length + (g.length === 1 ? ' prodotto' : ' prodotti'), chev)
+        ),
+        chiuso ? null : righe
       ));
     });
     if (writable){
@@ -672,9 +711,68 @@ var firebaseConfig = {
     return box;
   }
 
+  async function aggiungiNegozio(){
+    if (!writable) return;
+    var nome = maiusc(nuovoNome.trim());
+    if (!nome){ toast('Scrivi il nome del negozio'); return; }
+    if (NEGOZI.some(function(n){ return n.toLowerCase() === nome.toLowerCase(); })){ toast('Questo negozio c’è già'); return; }
+    var dati = {nome: nome, colore: nuovoColore, creato: Date.now()};
+    if (local || !PROJECT_ID){ custom.push(dati); applicaNegozi(); }
+    else {
+      var id = genId();
+      try {
+        await fsFetch('/negozi?documentId=' + id, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fields: toFields(dati)})}, 8000);
+        custom.push(Object.assign({id: id}, dati)); applicaNegozi();
+      } catch(e){ await onWriteError(e, null); return; }
+    }
+    nuovoNome = ''; neg = nome; toast('Negozio aggiunto: ' + nome); render();
+  }
+  async function togliNegozio(c){
+    if (items.some(function(i){ return i.negozio === c.nome; })){ toast('Prima elimina dall’archivio i prodotti di ' + c.nome); return; }
+    if (!local && PROJECT_ID && c.id){
+      try { await fsFetch('/negozi/' + c.id, {method:'DELETE'}, 8000); } catch(e){ await onWriteError(e, c.id); return; }
+    }
+    custom = custom.filter(function(x){ return x !== c; });
+    applicaNegozi();
+    if (neg === c.nome) neg = 'Coop';
+    render();
+  }
+  function viewImpostazioni(){
+    var ro = !writable;
+    var box = h('div', {class:'stack'});
+    box.append(h('section', {class:'card'},
+      h('div', {class:'aggiungi', style:'padding-bottom:6px'}, h('h2', null, 'I tuoi negozi')),
+      NEGOZI.map(function(n){
+        var c = custom.find(function(x){ return x.nome === n; });
+        return h('div', {class:'negozio-riga ' + CLS[n]},
+          h('span', {class:'pallino', 'aria-hidden':'true'}),
+          h('span', {class:'nome'}, n),
+          c ? h('button', {class:'trash', type:'button', 'aria-label':'Togli il negozio ' + n, disabled: ro, onclick:function(){ togliNegozio(c); }}, svg(ICON_TRASH)) : null
+        );
+      })
+    ));
+    box.append(h('section', {class:'card aggiungi'},
+      h('h2', null, 'Nuovo negozio'),
+      h('input', {id:'negozio', class:'campo', type:'text', placeholder:'Per esempio Conad', autocomplete:'off', enterkeyhint:'done',
+        'aria-label':'Nome del negozio', disabled: ro, value: nuovoNome,
+        oninput:function(e){ nuovoNome = e.target.value; },
+        onkeydown:function(e){ if (e.key === 'Enter'){ e.preventDefault(); aggiungiNegozio(); } }}),
+      h('p', {class:'hint'}, 'Scegli il colore:'),
+      h('div', {class:'colori', role:'group', 'aria-label':'Colore del negozio'},
+        COLORI.map(function(nome, k){
+          var n = k + 1;
+          return h('button', {type:'button', class:'colore st-p' + n + (nuovoColore === n ? ' on' : ''), 'aria-label':nome, 'aria-pressed': nuovoColore === n ? 'true' : 'false', disabled: ro,
+            onclick:function(){ nuovoColore = n; render(); }});
+        })
+      ),
+      h('button', {class:'btn', type:'button', disabled: ro, onclick:aggiungiNegozio}, 'Aggiungi il negozio')
+    ));
+    return box;
+  }
+
   function tabBtn(id, label){
     return h('button', {class:'tab', type:'button', role:'tab', 'aria-selected': tab === id ? 'true' : 'false',
-      onclick:function(){ tab = id; confermaFine = false; confSvuota = 0; render(); window.scrollTo(0,0); }}, label);
+      onclick:function(){ tab = id; confermaFine = null; confSvuota = 0; render(); window.scrollTo(0,0); }}, label);
   }
   function dockContent(){
     var out = [];
@@ -688,7 +786,8 @@ var firebaseConfig = {
     }
     out.push(h('nav', {class:'tabs', role:'tablist', 'aria-label':'Sezioni'},
       tabBtn('spesa', 'Spesa' + (lista.length ? ' (' + lista.length + ')' : '')),
-      tabBtn('archivio', 'Archivio')
+      tabBtn('archivio', 'Archivio'),
+      tabBtn('impostazioni', 'Impostazioni')
     ));
     return out;
   }
@@ -702,7 +801,7 @@ var firebaseConfig = {
     } else if (!loaded && !local){
       body = h('div', {class:'vuoto'}, h('p', null, 'Sto caricando la vostra lista…'));
     } else {
-      body = tab === 'spesa' ? viewSpesa() : viewArchivio();
+      body = tab === 'spesa' ? viewSpesa() : tab === 'archivio' ? viewArchivio() : viewImpostazioni();
     }
     app.replaceChildren(header(), body);
     dock.replaceChildren.apply(dock, dockContent());
@@ -732,6 +831,14 @@ var firebaseConfig = {
   /* ---------- avvio ---------- */
   async function caricaTutto(){
     try {
+      var dn = await fsFetch('/negozi?pageSize=100', {method:'GET'}, 8000);
+      custom = ((dn && dn.documents) || []).map(function(d){
+        var v = fromFields(d.fields); var k = parseInt(v.colore, 10);
+        return {id: d.name.split('/').pop(), nome: String(v.nome || ''), colore: (k >= 1 && k <= 5) ? k : 1};
+      }).filter(function(c){ return c.nome; });
+      applicaNegozi();
+    } catch(_){}
+    try {
       var data = await fsFetch('/prodotti?pageSize=1000', {method:'GET'}, 10000);
       var docs = (data && data.documents) || [];
       items = docs.map(function(d){
@@ -739,7 +846,7 @@ var firebaseConfig = {
         var v = fromFields(d.fields);
         return {id:id, nome:String(v.nome || ''), negozio:v.negozio, inLista:!!v.inLista, preso:!!v.preso,
                 prezzo: typeof v.prezzo === 'number' ? v.prezzo : null};
-      }).filter(function(i){ return i.nome && NEGOZI.indexOf(i.negozio) !== -1; });
+      }).filter(function(i){ return i.nome && !!i.negozio; });
       loaded = true;
       if (status === 'connessione' || status === 'errore') status = 'ok';
       scheduleRender();
