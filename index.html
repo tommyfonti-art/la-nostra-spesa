@@ -118,6 +118,11 @@ textarea.campo{resize:vertical;min-height:120px;line-height:1.45}
 .cat-sub{padding:10px 8px 2px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--ink-soft)}
 .trash.edit{min-width:42px}
 .btn-row{display:flex;gap:10px;flex-wrap:wrap}
+.barra{display:flex;gap:10px;align-items:center}
+.barra .btn{flex:none}
+.cerca{position:relative;flex:1 1 0;min-width:0}
+.cerca svg{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--ink-soft);pointer-events:none}
+.cerca .campo{padding:10px 12px 10px 42px;border-radius:999px;background:var(--surface-2)}
 :disabled{opacity:.5;cursor:not-allowed}
 :focus-visible{outline:3px solid var(--ink);outline-offset:2px}
 
@@ -195,6 +200,8 @@ var firebaseConfig = {
   var confSvuota = 0;
   var svuotando = false;
   var ordinaCategoria = false;
+  var cerca = '';
+  function norm(s){ return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
   var dirty = false;
   var PROJECT_ID = '';
   var API_KEY = '';
@@ -280,6 +287,7 @@ var firebaseConfig = {
   var ICON_CHECK = 'M5 12.5l4.5 4.5L19 7.5';
   var ICON_EDIT = 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4';
   var ICON_TRASH = 'M4 7h16M9 7V4h6v3M6.5 7l1 13h9l1-13';
+  var ICON_SEARCH = 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4';
 
   function applicaNegozi(){
     NEGOZI.length = 0;
@@ -650,15 +658,33 @@ var firebaseConfig = {
       ));
       return box;
     }
-    if (items.length){
-      box.append(h('div', {class:'btn-row'},
-        h('button', {class:'btn soft sm', type:'button', onclick:function(){ ordinaCategoria = !ordinaCategoria; render(); }},
-          ordinaCategoria ? 'Torna all’ordine alfabetico' : 'Ordina per categoria')
-      ));
+    var elenco = h('div', {class:'stack', id:'elenco-archivio'});
+    function disegnaElenco(){
+      elenco.replaceChildren.apply(elenco, cardsArchivio());
     }
+    box.append(h('div', {class:'barra'},
+      h('button', {class:'btn soft sm', type:'button', onclick:function(){ ordinaCategoria = !ordinaCategoria; render(); }},
+        ordinaCategoria ? 'Torna all’ordine alfabetico' : 'Ordina per categoria'),
+      h('label', {class:'cerca'},
+        svg(ICON_SEARCH),
+        h('input', {class:'campo', type:'search', autocomplete:'off', autocapitalize:'off', enterkeyhint:'search', placeholder:'Cerca', 'aria-label':'Cerca un prodotto', value: cerca,
+          oninput:function(e){ cerca = e.target.value; disegnaElenco(); },
+          onkeydown:function(e){ if (e.key === 'Enter'){ e.target.blur(); } }})
+      )
+    ));
+    box.append(elenco);
+    disegnaElenco();
+    return aggiungiFondo(box);
+  }
+
+  function cardsArchivio(){
+    var out = [];
+    var q = norm(cerca).trim();
+    var trovati = 0;
     NEGOZI.forEach(function(s){
-      var g = items.filter(function(i){ return i.negozio === s; });
+      var g = items.filter(function(i){ return i.negozio === s && (!q || norm(i.nome).indexOf(q) !== -1); });
       if (!g.length) return;
+      trovati += g.length;
       var righe;
       if (ordinaCategoria){
         g = g.slice().sort(byCategoria);
@@ -673,9 +699,9 @@ var firebaseConfig = {
         g = g.slice().sort(byNome);
         righe = g.map(rowArchivio);
       }
-      var chiuso = chiusi.has(s);
+      var chiuso = !q && chiusi.has(s);
       var chev = h('span', {class:'chev' + (chiuso ? ' chiuso' : ''), 'aria-hidden':'true'}, svg('M6 9l6 6 6-6'));
-      box.append(h('section', {class:'card ' + CLS[s] + (chiuso ? ' compatta' : '')},
+      out.push(h('section', {class:'card ' + CLS[s] + (chiuso ? ' compatta' : '')},
         h('button', {class:'card-h', type:'button', 'aria-expanded': chiuso ? 'false' : 'true',
           'aria-label': (chiuso ? 'Apri' : 'Chiudi') + ' l’elenco ' + s,
           onclick:function(){ if (chiusi.has(s)) chiusi.delete(s); else chiusi.add(s); salvaChiusi(); render(); }},
@@ -685,6 +711,16 @@ var firebaseConfig = {
         chiuso ? null : righe
       ));
     });
+    if (q && !trovati){
+      out.push(h('div', {class:'vuoto'},
+        h('p', {class:'titolo'}, 'Nessun prodotto trovato'),
+        h('p', null, 'Prova a scrivere un’altra parola.')
+      ));
+    }
+    return out;
+  }
+
+  function aggiungiFondo(box){
     if (writable){
       if (confSvuota === 0){
         box.append(h('div', {class:'fine'},
