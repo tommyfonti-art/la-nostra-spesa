@@ -50,7 +50,7 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html{touch-action:manipulation}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Nunito,ui-rounded,"Avenir Next Rounded","Segoe UI",system-ui,sans-serif;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 h1,h2,.num{font-family:Fredoka,ui-rounded,"Avenir Next Rounded",system-ui,sans-serif;font-weight:600}
-main{max-width:560px;margin:0 auto;padding:20px 16px 210px}
+main{max-width:560px;margin:0 auto;padding:20px 16px 290px}
 .top{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
 h1{font-size:30px;margin:0;line-height:1.1}
 .sync{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-soft)}
@@ -138,6 +138,12 @@ textarea.campo{resize:vertical;min-height:120px;line-height:1.45}
 .t-label{font-weight:700}
 .t-sub{font-size:14px;opacity:.85}
 .totale .num{font-size:30px;line-height:1}
+.extra{display:flex;align-items:center;gap:8px;background:var(--surface);border:1.5px solid var(--line);border-radius:26px;padding:6px 6px 6px 18px}
+.extra .lab{flex:none;font-weight:700;font-size:14px;color:var(--ink-soft);line-height:1.15}
+.extra .prezzo{flex:1;width:auto;min-width:0}
+.extra .btn{flex:none;padding:11px 18px}
+.extra-chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 6px}
+.extra-chip{border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:700;font-size:14px;border-radius:999px;padding:6px 14px;cursor:pointer}
 .tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;background:var(--surface);border:1.5px solid var(--line);border-radius:999px;padding:5px}
 .tab{border:0;background:transparent;color:var(--ink-soft);font:inherit;font-weight:700;font-size:15px;border-radius:999px;padding:12px 6px;cursor:pointer;transition:background .15s}
 .tab[aria-selected="true"]{background:var(--surface-2);color:var(--ink)}
@@ -179,6 +185,8 @@ var firebaseConfig = {
   var NS = 'http://www.w3.org/2000/svg';
 
   var items = [];
+  var extras = [];
+  var extraDraft = '';
   var tab = 'spesa';
   var status = 'connessione';
   var loaded = false;
@@ -490,8 +498,34 @@ var firebaseConfig = {
     confermaFine = null;
     var presi = items.filter(function(i){ return i.negozio === negozio && i.inLista && i.preso; });
     for (var i of presi){ await save(i.id, {inLista:false, preso:false, prezzo:null}); }
+    /* se non resta più niente in lista, tolgo anche gli importi extra */
+    if (!items.some(function(i){ return i.inLista; })){
+      for (var x of extras.slice()){ await togliExtra(x, true); }
+    }
     toast('Spesa conclusa: ' + negozio);
     render();
+  }
+  /* importi "extra": cose comprate senza averle messe in lista, solo il prezzo */
+  async function aggiungiExtra(){
+    if (!writable) return;
+    var v = parsePrezzo(extraDraft);
+    if (v === null || Number.isNaN(v) || v <= 0){ toast('Scrivi quanto hai speso in numeri, per esempio 2,50'); return; }
+    if (local){
+      extras.push({id: 'l' + Date.now() + Math.random().toString(36).slice(2,6), prezzo: v});
+      extraDraft = ''; render(); return;
+    }
+    var id = genId();
+    try {
+      await fsFetch('/prodotti?documentId=' + id, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fields: toFields({extra:true, prezzo:v})})}, 8000);
+      extras.push({id:id, prezzo:v});
+      extraDraft = ''; render();
+    } catch(e){ await onWriteError(e, null); }
+  }
+  async function togliExtra(x, silenzioso){
+    extras = extras.filter(function(e){ return e.id !== x.id; });
+    if (!silenzioso) render();
+    if (local) return;
+    try { await fsFetch('/prodotti/' + x.id, {method:'DELETE'}, 8000); } catch(e){ await onWriteError(e, x.id); }
   }
   async function svuotaArchivio(){
     if (!writable || svuotando) return;
@@ -813,11 +847,32 @@ var firebaseConfig = {
   function dockContent(){
     var out = [];
     var lista = items.filter(function(i){ return i.inLista; });
-    if (tab === 'spesa' && lista.length){
+    if (tab === 'spesa' && (lista.length || extras.length)){
       var presi = lista.filter(function(i){ return i.preso; });
+      var ro = !writable;
+      if (extras.length){
+        out.push(h('div', {class:'extra-chips', 'aria-label':'Importi aggiunti fuori lista'},
+          extras.map(function(x){
+            return h('button', {class:'extra-chip', type:'button', disabled: ro, 'aria-label':'Togli l’importo ' + fmt(x.prezzo),
+              onclick:function(){ togliExtra(x); }}, fmt(x.prezzo) + ' ✕');
+          })
+        ));
+      }
+      out.push(h('div', {class:'extra'},
+        h('span', {class:'lab'}, 'Altro, non in lista'),
+        h('label', {class:'prezzo'},
+          h('span', null, '€'),
+          h('input', {type:'text', inputmode:'decimal', placeholder:'0,00', 'aria-label':'Importo di qualcosa non in lista', disabled: ro, value: extraDraft,
+            oninput:function(e){ extraDraft = e.target.value; },
+            onkeydown:function(e){ if (e.key === 'Enter'){ e.preventDefault(); aggiungiExtra(); } }})
+        ),
+        h('button', {class:'btn', type:'button', disabled: ro, onclick:aggiungiExtra}, 'Aggiungi')
+      ));
+      var sub = presi.length + ' presi su ' + lista.length;
+      if (extras.length) sub += ' · extra ' + fmt(sum(extras));
       out.push(h('div', {class:'totale', role:'status'},
-        h('div', null, h('div', {class:'t-label'}, 'Speso finora'), h('div', {class:'t-sub'}, presi.length + ' presi su ' + lista.length)),
-        h('div', {class:'num'}, fmt(sum(presi)))
+        h('div', null, h('div', {class:'t-label'}, 'Speso finora'), h('div', {class:'t-sub'}, sub)),
+        h('div', {class:'num'}, fmt(sum(presi) + sum(extras)))
       ));
     }
     out.push(h('nav', {class:'tabs', role:'tablist', 'aria-label':'Sezioni'},
@@ -854,15 +909,17 @@ var firebaseConfig = {
   }
   function inputFocused(){
     var a = document.activeElement;
-    return !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && app.contains(a));
+    return !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA') && (app.contains(a) || dock.contains(a)));
   }
   function scheduleRender(){
     if (inputFocused()) dirty = true; else render();
   }
-  app.addEventListener('focusout', function(){
+  function dopoFocus(){
     if (!dirty) return;
     setTimeout(function(){ if (dirty && !inputFocused()) render(); }, 250);
-  });
+  }
+  app.addEventListener('focusout', dopoFocus);
+  dock.addEventListener('focusout', dopoFocus);
 
   /* ---------- avvio ---------- */
   async function caricaTutto(){
@@ -877,9 +934,14 @@ var firebaseConfig = {
     try {
       var data = await fsFetch('/prodotti?pageSize=1000', {method:'GET'}, 10000);
       var docs = (data && data.documents) || [];
+      extras = [];
       items = docs.map(function(d){
         var id = d.name.split('/').pop();
         var v = fromFields(d.fields);
+        if (v.extra === true){
+          if (typeof v.prezzo === 'number') extras.push({id:id, prezzo:v.prezzo});
+          return {id:id, nome:'', negozio:null};
+        }
         return {id:id, nome:String(v.nome || ''), negozio:v.negozio, inLista:!!v.inLista, preso:!!v.preso,
                 prezzo: typeof v.prezzo === 'number' ? v.prezzo : null};
       }).filter(function(i){ return i.nome && !!i.negozio; });
