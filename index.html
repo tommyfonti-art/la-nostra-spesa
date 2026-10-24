@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
-<head>
+<head><meta name="versione-app" content="2026-10-24b">
 <meta charset="utf-8">
 <title>La nostra spesa</title>
 <link rel="apple-touch-icon" href="icon.png?v=2">
@@ -17,15 +17,15 @@
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
-  --bg:#EDF3F0; --surface:#FBFDFC; --surface-2:#E1ECE7; --ink:#27393B; --ink-soft:#5B7074; --line:#D0DED8;
-  --accent:#8CC0AD; --accent-ink:#1B3830;
+  --bg:#A4C1B7; --surface:#C9DDD5; --surface-2:#B6D0C6; --ink:#14282A; --ink-soft:#3A5654; --line:#86A89B;
+  --accent:#5FA58D; --accent-ink:#0F2A22;
   --coop:#F5CDCD; --coop-ink:#6B3434;
   --tigota:#D6D3F4; --tigota-ink:#3F3870;
   --lidl:#F8E8B4; --lidl-ink:#66571A;
   --warn-bg:#F3CFCF; --warn-ink:#6B2E2E;
   --p1:#CDE8C9; --p1-ink:#2F5A2B; --p2:#C9E2F2; --p2-ink:#2B4F66; --p3:#F7D9BE; --p3-ink:#6B4220; --p4:#F1CDE6; --p4-ink:#6B2F5A; --p5:#DADDE0; --p5-ink:#3A4247;
 }
-/* sempre chiaro, anche se il telefono è in modalità scura */
+/* tono medio fisso (né chiaro né scuro), anche se il telefono è in modalità scura */
 :root{color-scheme:light}
 :root[data-theme="dark"]{
   --bg:#1B2626; --surface:#243231; --surface-2:#2E3F3D; --ink:#E4EEEA; --ink-soft:#9DB3AE; --line:#384B4A;
@@ -945,6 +945,38 @@ var firebaseConfig = {
     pollTimer = setInterval(caricaTutto, 4000);
   }
   init();
+})();
+</script>
+<script>
+/* aggiornamento automatico: se su GitHub c'è una versione nuova dell'app, la ricarico da sola.
+   La versione è nel tag <meta name="versione-app"> in alto: va cambiata a ogni modifica. */
+(function(){
+  try{
+    var mia = (document.querySelector('meta[name="versione-app"]')||{}).content;
+    if(!mia || !window.fetch || location.protocol.indexOf('http')!==0) return;
+    var inCorso = false;
+    function occupato(){ var a = document.activeElement; return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)); }
+    function controlla(){
+      if(inCorso || document.hidden) return;
+      inCorso = true;
+      fetch(location.pathname + '?c=' + Date.now(), { cache:'no-store' })
+        .then(function(r){ return r.ok ? r.text() : ''; })
+        .then(function(t){
+          inCorso = false;
+          var m = t && t.match(/<meta name="versione-app" content="([^"]+)"/);
+          if(!m || m[1] === mia) return;
+          if(occupato()) return;
+          var chiave = 'agg_' + m[1];
+          try{ if(sessionStorage.getItem(chiave)) return; sessionStorage.setItem(chiave, '1'); }catch(e){}
+          try{ window.dispatchEvent(new Event('pagehide')); }catch(e){}
+          setTimeout(function(){ location.replace(location.pathname + '?v=' + encodeURIComponent(m[1])); }, 500);
+        })
+        .catch(function(){ inCorso = false; });
+    }
+    setTimeout(controlla, 1500);
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) setTimeout(controlla, 700); });
+    setInterval(controlla, 300000);
+  }catch(e){}
 })();
 </script>
 </body>
