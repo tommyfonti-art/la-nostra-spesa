@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
-<head><meta name="versione-app" content="2026-10-24c">
+<head><meta name="versione-app" content="2026-10-27a">
 <meta charset="utf-8">
 <title>La nostra spesa</title>
 <link rel="apple-touch-icon" href="icon.png?v=2">
@@ -148,6 +148,8 @@ textarea.campo{resize:vertical;min-height:120px;line-height:1.45}
 <div class="dock" id="dock"></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
+<script>window.ACCESSO={apiKey:"AIzaSyBf_L7I710y1uCfqexrRS2A7fa1AIeQdPM",progetto:"spesa-b6ed3",titolo:"La nostra spesa"};</script>
+<script src="accesso-rest.js"></script>
 <script>
 /* ====== INCOLLA QUI LA TUA CONFIGURAZIONE FIREBASE ======
    La trovi in: Console Firebase → icona ingranaggio → Impostazioni progetto
@@ -328,23 +330,29 @@ var firebaseConfig = {
     });
     return o;
   }
-  function fsFetch(path, opts, ms){
-    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var t = ctrl && setTimeout(function(){ ctrl.abort(); }, ms || 8000);
-    var sep = path.indexOf('?') >= 0 ? '&' : '?';
-    var url = API_BASE + path + sep + 'key=' + encodeURIComponent(API_KEY);
-    var o = Object.assign({}, opts || {});
-    if (ctrl) o.signal = ctrl.signal;
-    return fetch(url, o).then(function(res){
-      if (t) clearTimeout(t);
-      if (!res.ok){
-        var code = res.status === 403 ? 'permission-denied' : res.status === 404 ? 'not-found' : res.status === 429 ? 'resource-exhausted' : 'error';
-        return res.text().then(function(){ var err = new Error('fs'); err.code = code; throw err; });
-      }
-      return res.status === 204 ? null : res.json();
+  function fsFetch(path, opts, ms, secondaVolta){
+    return accessoToken(secondaVolta).then(function(token){
+      var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      var t = ctrl && setTimeout(function(){ ctrl.abort(); }, ms || 8000);
+      var sep = path.indexOf('?') >= 0 ? '&' : '?';
+      var url = API_BASE + path + sep + 'key=' + encodeURIComponent(API_KEY);
+      var o = Object.assign({}, opts || {});
+      o.headers = Object.assign({}, o.headers || {}, { 'Authorization': 'Bearer ' + token });
+      if (ctrl) o.signal = ctrl.signal;
+      return fetch(url, o).then(function(res){
+        if (t) clearTimeout(t);
+        if (!res.ok){
+          if (res.status === 401 && !secondaVolta) return fsFetch(path, opts, ms, true);
+          var code = (res.status === 403 || res.status === 401) ? 'permission-denied' : res.status === 404 ? 'not-found' : res.status === 429 ? 'resource-exhausted' : 'error';
+          return res.text().then(function(){ var err = new Error('fs'); err.code = code; throw err; });
+        }
+        return res.status === 204 ? null : res.json();
+      }, function(e){
+        if (t) clearTimeout(t);
+        var err = new Error('fs'); err.code = (e && e.name === 'AbortError') ? 'timeout' : 'network'; throw err;
+      });
     }, function(e){
-      if (t) clearTimeout(t);
-      var err = new Error('fs'); err.code = (e && e.name === 'AbortError') ? 'timeout' : 'network'; throw err;
+      var err = new Error('fs'); err.code = (e && e.code === 'no-session') ? 'no-session' : 'network'; throw err;
     });
   }
 
