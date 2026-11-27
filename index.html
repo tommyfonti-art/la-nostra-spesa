@@ -343,7 +343,7 @@ var firebaseConfig = {
         if (t) clearTimeout(t);
         if (!res.ok){
           if (res.status === 401 && !secondaVolta) return fsFetch(path, opts, ms, true);
-          var code = (res.status === 403 || res.status === 401) ? 'permission-denied' : res.status === 404 ? 'not-found' : res.status === 429 ? 'resource-exhausted' : 'error';
+          var code = (res.status === 403 || res.status === 401) ? 'permission-denied' : res.status === 404 ? 'not-found' : res.status === 409 ? 'gia-esiste' : res.status === 429 ? 'resource-exhausted' : res.status >= 500 ? 'server' : 'error';
           return res.text().then(function(){ var err = new Error('fs'); err.code = code; throw err; });
         }
         return res.status === 204 ? null : res.json();
@@ -369,34 +369,98 @@ var firebaseConfig = {
       toast('Non sono riuscito a salvare. Riprova.');
     }
   }
+  /* 27 novembre: ogni modifica entra in una coda che resta sul telefono e parte appena c'è segnale.
+     Così al supermercato, anche senza rete, spunte e prezzi non spariscono più. */
+  var CHIAVE_CODA = 'spesa_coda_modifiche', CHIAVE_COPIA = 'spesa_copia_telefono';
+  var coda = [];          // [{id, tipo:'crea'|'modifica'|'togli', dati}]
+  var invioInCorso = false, riprovaTimer = null, avvisatoSenzaRete = false;
+  var recenti = []; // modifiche appena inviate: per qualche secondo il server potrebbe non mostrarle ancora
+  try { coda = JSON.parse(localStorage.getItem(CHIAVE_CODA) || '[]') || []; } catch(_){ coda = []; }
+  function salvaCoda(){ try { localStorage.setItem(CHIAVE_CODA, JSON.stringify(coda)); } catch(_){} }
+  function salvaCopia(){ try { localStorage.setItem(CHIAVE_COPIA, JSON.stringify({items: items, quando: Date.now()})); } catch(_){} }
+  function inCoda(id, tipo, dati){
+    var prima = coda.filter(function(o){ return o.id === id; })[0];
+    if (tipo === 'modifica' && prima && prima.tipo !== 'togli'){ Object.assign(prima.dati, dati); }
+    else if (tipo === 'togli' && prima && prima.tipo === 'crea'){ coda = coda.filter(function(o){ return o.id !== id; }); }
+    else if (tipo === 'togli'){ coda = coda.filter(function(o){ return o.id !== id; }); coda.push({id:id, tipo:'togli'}); }
+    else coda.push({id:id, tipo:tipo, dati:Object.assign({}, dati)});
+    salvaCoda(); salvaCopia();
+    inviaCoda();
+  }
+  // le modifiche ancora in coda si rimettono sopra a quello che arriva dal server
+  function applicaCoda(lista){
+    var r = lista.slice();
+    recenti = recenti.filter(function(x){ return Date.now() - x.t < 10000; });
+    recenti.map(function(x){ return x.o; }).concat(coda).forEach(function(o){
+      var i = r.findIndex(function(x){ return x.id === o.id; });
+      if (o.tipo === 'togli'){ if (i >= 0) r.splice(i, 1); }
+      else if (i >= 0) r[i] = Object.assign({}, r[i], o.dati);
+      else if (o.tipo === 'crea') r.push(Object.assign({id:o.id}, o.dati));
+    });
+    return r;
+  }
+  function riprovaTraPoco(){ clearTimeout(riprovaTimer); riprovaTimer = setTimeout(inviaCoda, 8000); }
+  async function inviaCoda(){
+    if (local || invioInCorso || !coda.length || !PROJECT_ID) return;
+    invioInCorso = true;
+    while (coda.length){
+      var o = coda[0];
+      try {
+        if (o.tipo === 'crea'){
+          try { await fsFetch('/prodotti?documentId=' + o.id, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fields: toFields(o.dati)})}, 8000); }
+          catch(e){ if (!(e && e.code === 'gia-esiste')) throw e; } // già arrivato prima: va bene così
+        } else if (o.tipo === 'modifica'){
+          var qs = Object.keys(o.dati).map(function(k){ return 'updateMask.fieldPaths=' + encodeURIComponent(k); }).join('&');
+          await fsFetch('/prodotti/' + o.id + '?' + qs + '&currentDocument.exists=true', {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fields: toFields(o.dati)})}, 8000);
+        } else {
+          try { await fsFetch('/prodotti/' + o.id, {method:'DELETE'}, 8000); }
+          catch(e){ if (!(e && e.code === 'not-found')) throw e; }
+        }
+        if (coda[0] === o) coda.shift(); else coda = coda.filter(function(x){ return x !== o; });
+        salvaCoda();
+        recenti.push({o:o, t:Date.now()});
+        if (avvisatoSenzaRete && !coda.length){ avvisatoSenzaRete = false; toast('Tornata la rete: modifiche salvate ✓'); }
+      } catch(e){
+        var c = e && e.code;
+        if (c === 'network' || c === 'timeout' || c === 'no-session' || c === 'server' || c === 'resource-exhausted'){
+          // senza rete (o server occupato): la modifica resta in coda e si riprova da sola
+          if (!avvisatoSenzaRete){ avvisatoSenzaRete = true; toast('Senza rete: le modifiche restano sul telefono e partono appena torna il segnale'); }
+          invioInCorso = false; render(); riprovaTraPoco(); return;
+        }
+        // errori definitivi: la modifica non si può fare, si toglie dalla coda
+        coda = coda.filter(function(x){ return x !== o; }); salvaCoda();
+        if (c === 'not-found') toast('Questo prodotto è stato tolto da un altro dispositivo');
+        else await onWriteError(e, o.id);
+      }
+    }
+    invioInCorso = false;
+    render();
+  }
+  window.addEventListener('online', function(){ inviaCoda(); });
+
   function save(id, patch){
     var it = items.find(function(x){ return x.id === id; });
     if (it) Object.assign(it, patch);
     render();
     if (local) return Promise.resolve();
-    var run = function(){
-      var qs = Object.keys(patch).map(function(k){ return 'updateMask.fieldPaths=' + encodeURIComponent(k); }).join('&');
-      return fsFetch('/prodotti/' + id + '?' + qs, {method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fields: toFields(patch)})})
-        .catch(function(err){ return onWriteError(err, id); });
-    };
-    queues[id] = (queues[id] || Promise.resolve()).then(run);
-    return queues[id];
+    inCoda(id, 'modifica', patch);
+    return Promise.resolve();
   }
   async function create(data){
     if (local){
       items.push(Object.assign({id: 'l' + Date.now() + Math.random().toString(36).slice(2,6)}, data));
       return true;
     }
-    try {
-      await fsFetch('/prodotti?documentId=' + genId(), {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({fields: toFields(data)})}, 8000);
-      return true;
-    } catch(e){ await onWriteError(e, null); return false; }
+    var id = genId();
+    items.push(Object.assign({id: id}, data));
+    inCoda(id, 'crea', data);
+    return true;
   }
   async function remove(item){
-    if (local){ items = items.filter(function(x){ return x.id !== item.id; }); render(); return; }
     items = items.filter(function(x){ return x.id !== item.id; });
     render();
-    try { await fsFetch('/prodotti/' + item.id, {method:'DELETE'}, 8000); } catch(e){ await onWriteError(e, item.id); }
+    if (local) return;
+    inCoda(item.id, 'togli');
   }
 
   /* ---------- azioni ---------- */
@@ -557,9 +621,11 @@ var firebaseConfig = {
       lettura: 'Sola lettura: puoi guardare ma non modificare',
       locale: 'Dati non salvati: apri la pagina da Claude',
       setup: 'Manca ancora la configurazione Firebase nel file',
-      errore: 'Problema di connessione'
+      errore: 'Problema di connessione',
+      senzarete: 'Senza rete: uso la copia sul telefono'
     }[status] || '';
-    var warn = status !== 'ok' && status !== 'connessione';
+    if (status === 'ok' && coda.length) txt = 'Senza rete: ' + coda.length + (coda.length === 1 ? ' modifica aspetta' : ' modifiche aspettano') + ' il segnale';
+    var warn = (status !== 'ok' && status !== 'connessione') || (status === 'ok' && coda.length > 0);
     return h('header', {class:'top'},
       h('h1', null, 'La nostra spesa'),
       h('div', {class:'sync' + (warn ? ' warn' : '')}, h('span', {class:'dot'}), txt)
@@ -931,12 +997,20 @@ var firebaseConfig = {
         return {id:id, nome:String(v.nome || ''), negozio:v.negozio, inLista:!!v.inLista, preso:!!v.preso,
                 prezzo: typeof v.prezzo === 'number' ? v.prezzo : null};
       }).filter(function(i){ return i.nome && !!i.negozio; });
+      items = applicaCoda(items);
+      salvaCopia();
       loaded = true;
-      if (status === 'connessione' || status === 'errore') status = 'ok';
+      if (status === 'connessione' || status === 'errore' || status === 'senzarete') status = 'ok';
+      if (coda.length) inviaCoda();
       scheduleRender();
     } catch(e){
       if (e && e.code === 'permission-denied'){ writable = false; status = 'lettura'; }
-      else if (!loaded){ status = 'errore'; }
+      else if (!loaded){
+        // senza rete all'apertura: si usa la copia salvata sul telefono, e si può spuntare lo stesso
+        var cp = null; try { cp = JSON.parse(localStorage.getItem(CHIAVE_COPIA) || 'null'); } catch(_){}
+        if (cp && Array.isArray(cp.items)){ items = applicaCoda(cp.items); status = 'senzarete'; }
+        else status = 'errore';
+      }
       loaded = true; render();
     }
   }
