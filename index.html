@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="La spesa">
 <meta name="theme-color" content="#C42B28">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
@@ -142,7 +142,7 @@ textarea.campo{resize:vertical;min-height:120px;line-height:1.45}
 .toast[hidden]{display:none}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
-</head>
+<style>html{touch-action:manipulation;-webkit-text-size-adjust:100%}</style></head>
 <body>
 <main id="app" aria-live="off"></main>
 <div class="dock" id="dock"></div>
@@ -917,9 +917,23 @@ var firebaseConfig = {
       ),
       h('button', {class:'btn', type:'button', disabled: ro, onclick:aggiungiNegozio}, 'Aggiungi il negozio')
     ));
+    box.append(h('section', {class:'card aggiungi'},
+      h('h2', null, 'Copia di sicurezza'),
+      h('p', {class:'hint'}, 'Un file con tutti i prodotti dell’archivio, la lista e i negozi, da tenere dove vuoi.'),
+      h('button', {class:'btn', type:'button', onclick:scaricaDati}, 'Scarica i dati')
+    ));
     return box;
   }
 
+  function scaricaDati(){
+    var d = new Date();
+    var nome = 'la-nostra-spesa-' + d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + '.json';
+    var blob = new Blob([JSON.stringify({app:'La nostra spesa', salvato:d.toISOString(), negozi:custom, prodotti:items}, null, 2)], {type:'application/json'});
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    toast('File con i dati scaricato');
+  }
   function tabBtn(id, label){
     return h('button', {class:'tab', type:'button', role:'tab', 'aria-selected': tab === id ? 'true' : 'false',
       onclick:function(){ tab = id; confermaFine = null; confSvuota = 0; render(); window.scrollTo(0,0); }}, label);
@@ -1061,5 +1075,6 @@ var firebaseConfig = {
   }catch(e){}
 })();
 </script>
+<!-- niente zoom: il pizzico è bloccato qui, il doppio tocco da touch-action (27 novembre) --><script>(function(){var b=function(e){e.preventDefault()};["gesturestart","gesturechange","gestureend"].forEach(function(n){document.addEventListener(n,b,{passive:false})});document.addEventListener("touchmove",function(e){if(e.touches.length>1)e.preventDefault()},{passive:false})})();</script>
 </body>
 </html>
